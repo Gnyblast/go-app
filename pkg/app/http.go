@@ -143,6 +143,8 @@ type Handler struct {
 	// issues with go-app functionality.
 	ServiceWorkerTemplate string
 
+	MiddleWares map[string][]func(http.Handler) http.Handler
+
 	once                 sync.Once
 	etag                 string
 	libraries            map[string][]byte
@@ -471,6 +473,21 @@ func (h *Handler) initProxyResources() {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	mws, ok := h.MiddleWares[r.URL.Path]
+	if ok {
+		var handler http.Handler = http.HandlerFunc(h.serveHTTP)
+		for _, mw := range mws {
+			handler = mw(handler)
+		}
+
+		handler.ServeHTTP(w, r)
+		return
+	}
+
+	h.serveHTTP(w, r)
+}
+
+func (h *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	h.once.Do(h.init)
 
 	w.Header().Set("Cache-Control", "no-cache")
